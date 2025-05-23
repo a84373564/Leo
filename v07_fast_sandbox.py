@@ -1,24 +1,32 @@
 import os
 import json
 import random
+import requests
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MAX_MODS = 500  # 最多處理 500 模組
-ENTRY_RANGE = (0.95, 1.05)
-EXIT_RANGE = (0.97, 1.10)
-SHARPE_NOISE = (0.8, 2.5)
+API_URL = "https://api.mexc.com/api/v3/ticker/price?symbol={}"
+MAX_MODS = 500
 
 def load_mod_files():
     return sorted([f for f in os.listdir(BASE_DIR) if f.startswith("mod_") and f.endswith(".json")])[:MAX_MODS]
 
-def simulate_strategy(mod):
-    entry = round(random.uniform(*ENTRY_RANGE), 4)
-    exit_price = round(entry * random.uniform(*EXIT_RANGE), 4)
+def fetch_market_price(symbol):
+    try:
+        response = requests.get(API_URL.format(symbol))
+        data = response.json()
+        return float(data['price'])
+    except Exception as e:
+        print(f"API Error: {e}")
+        return None
+
+def simulate_strategy(mod, market_price):
+    entry = round(market_price * random.uniform(0.99, 1.01), 4)
+    exit_price = round(entry * random.uniform(0.99, 1.02), 4)
     profit = exit_price - entry
     return_pct = (profit / entry) * 100
     drawdown = round(random.uniform(0.5, 5.0), 2)
-    sharpe = round(random.uniform(*SHARPE_NOISE), 2)
+    sharpe = round(random.uniform(0.8, 2.5), 2)
     win_rate = round(random.uniform(40, 80), 2)
 
     mod["entry_price"] = entry
@@ -35,7 +43,7 @@ def simulate_strategy(mod):
     return mod
 
 def main():
-    print(">>> v07_fast_sandbox.py 啟動（模擬 500 模組績效）")
+    print(">>> v07_fast_sandbox.py (實戰市場價格基準版) 啟動")
     mod_files = load_mod_files()
     print(f">>> 共讀取模組：{len(mod_files)} 檔")
 
@@ -44,12 +52,16 @@ def main():
         with open(path, "r") as f:
             mod = json.load(f)
 
-        mod = simulate_strategy(mod)
+        market_price = fetch_market_price(mod["symbol"])
+        if market_price is None:
+            continue
+
+        mod = simulate_strategy(mod, market_price)
 
         with open(path, "w") as f:
             json.dump(mod, f, indent=2)
 
-    print(">>> 沙盤模擬完成，績效已寫回所有模組")
+    print(">>> 沙盤模擬完成，績效已更新")
 
 if __name__ == "__main__":
     main()
